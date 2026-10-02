@@ -42,3 +42,31 @@ def test_clip_offsets_skip_intro():
     assert offs[0] == 20.0 and len(offs) == 4 and offs[-1] <= 200 - 12
     assert clip_offsets(10) == [0.0]
 
+
+
+def test_songs_lists_medley_in_order():
+    v = vote([None, m("Stuck In The Middle"), m("Love, Maybe"), None, m("DREAM"), m("Love, Maybe")], 6)
+    assert [s["title"] for s in v["songs"]] == ["Stuck In The Middle", "Love, Maybe", "DREAM"]
+    assert v["match"]["title"] == "Love, Maybe" and v["songs"][1]["votes"] == 2
+    assert vote([None], 1)["songs"] == []
+
+
+def test_runner_counts_each_clip_once(monkeypatch, tmp_path):
+    import asyncio
+    from app.recognize import runner
+
+    answers = {"c0": m("A"), "c0_dn": m("A"), "c1": None, "c1_dn": m("B"), "c2": m("A"), "c2_dn": m("C")}
+
+    class Fake:
+        name = "fake"
+        async def recognize(self, clip):
+            return answers[clip.stem]
+
+    monkeypatch.setattr(runner, "recognizers", lambda: [Fake()])
+    monkeypatch.setattr(runner.media, "denoise_clip", lambda c: c.with_name(c.stem + "_dn.wav"))
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(runner.asyncio, "sleep", lambda s: real_sleep(0))
+    clips = [tmp_path / f"c{i}.wav" for i in range(3)]
+    v = asyncio.run(runner.recognize_clips(clips))
+    assert v["votes"] == 2 and v["match"]["title"] == "A"          # c0, c2
+    assert [(s["title"], s["votes"]) for s in v["songs"]] == [("A", 2), ("B", 1), ("C", 1)]

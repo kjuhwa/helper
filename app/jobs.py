@@ -37,6 +37,7 @@ STEP_LABELS = {
     "canceled": "취소됨",
 }
 FINISHED = {"done", "error", "canceled"}
+NO_AUDIO_WARNING = "오디오로 노래를 특정하지 못했고 다른 근거도 약합니다. 곡 정보가 맞는지 꼭 확인하세요."
 
 # Claude CLI / Shazam 과부하를 막기 위해 동시에 돌리는 분석 수 제한
 _slots: asyncio.Semaphore | None = None
@@ -197,9 +198,8 @@ async def _analyze(job: Job) -> None:
         job.status = "compose"
         meta = await asyncio.to_thread(compose.compose, recognition, vis, res,
                                        source, job.hint)
-        if not recognition.get("match"):
-            meta.setdefault("warnings", []).insert(
-                0, "오디오로 노래를 특정하지 못했습니다. 화면/힌트 기반 추정이므로 꼭 확인하세요.")
+        if not recognition.get("match") and meta.get("song_confidence") != "high":
+            meta.setdefault("warnings", []).insert(0, NO_AUDIO_WARNING)
         meta = youtube_rules.apply(meta)
 
         job.result = {

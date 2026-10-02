@@ -19,7 +19,7 @@ def vote(matches: list[Match | None], total_clips: int) -> dict:
         groups[k].append(m)
     if not groups:
         return {"match": None, "votes": 0, "total": total_clips,
-                "confidence": "none", "alternatives": []}
+                "confidence": "none", "alternatives": [], "songs": []}
     best = max(order, key=lambda k: (len(groups[k]), -order.index(k)))
     votes = len(groups[best])
     # 대표값: 앨범/ISRC 정보가 가장 많은 것
@@ -27,5 +27,8 @@ def vote(matches: list[Match | None], total_clips: int) -> dict:
     ratio = votes / max(total_clips, 1)
     confidence = "high" if votes >= 2 and ratio >= 0.5 else "medium" if votes >= 2 else "low"
     alts = [groups[k][0].to_dict() | {"votes": len(groups[k])} for k in order if k != best]
+    # 메들리 대비: 인식된 곡 전부를 영상 시간순(처음 잡힌 구간 순)으로
+    songs = [{"title": groups[k][0].title, "artist": groups[k][0].artist, "votes": len(groups[k])}
+             for k in order]
     return {"match": rep.to_dict(), "votes": votes, "total": total_clips,
-            "confidence": confidence, "alternatives": alts}
+            "confidence": confidence, "alternatives": alts, "songs": songs}

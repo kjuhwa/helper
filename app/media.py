@@ -47,7 +47,7 @@ def probe(video: Path) -> dict:
     return {"duration": duration, "has_audio": "Audio:" in out}
 
 
-def clip_offsets(duration: float, count: int = 4, length: float = 12.0) -> list[float]:
+def clip_offsets(duration: float, count: int = 6, length: float = 20.0) -> list[float]:
     """앞 10%(인트로/MC 멘트)를 건너뛰고 균등 분포한 클립 시작점."""
     if duration <= length:
         return [0.0]
@@ -60,7 +60,7 @@ def clip_offsets(duration: float, count: int = 4, length: float = 12.0) -> list[
 
 
 def extract_audio_clips(video: Path, out_dir: Path, duration: float,
-                        count: int = 4, length: float = 12.0) -> list[Path]:
+                        count: int = 6, length: float = 20.0) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     clips = []
     for i, off in enumerate(clip_offsets(duration, count, length)):
@@ -70,6 +70,16 @@ def extract_audio_clips(video: Path, out_dir: Path, duration: float,
         if r.returncode == 0 and dst.exists() and dst.stat().st_size > 1000:
             clips.append(dst)
     return clips
+
+
+# 관중 함성·저음 울림을 줄이고 음량을 고르게: 라이브/직캠 재시도용
+DENOISE_FILTER = "highpass=f=150,lowpass=7000,dynaudnorm"
+
+
+def denoise_clip(clip: Path) -> Path | None:
+    dst = clip.with_name(clip.stem + "_dn.wav")
+    r = _run(["-y", "-i", str(clip), "-af", DENOISE_FILTER, "-ac", "1", "-ar", "16000", str(dst)])
+    return dst if r.returncode == 0 and dst.exists() and dst.stat().st_size > 1000 else None
 
 
 def extract_frames(video: Path, out_dir: Path, duration: float, count: int = 10,

@@ -56,6 +56,8 @@ button.copy.done { color: var(--ok); border-color: var(--ok); }
 .warn-more summary { cursor: pointer; font-size: 13px; color: var(--warn-fg); margin: 0 0 8px 4px; }
 .badge { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
 .badge.high { color: var(--ok); border-color: var(--ok); }
+.badge.info { color: var(--fg); border-color: var(--muted); }
+.badge.medium { color: var(--ok); }
 .badge.none { color: var(--err); border-color: var(--err); }
 .song { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; }
 .song dt { color: var(--muted); }

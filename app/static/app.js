@@ -110,11 +110,41 @@ function renderTitles(titles, selected) {
   }));
 }
 
+// 오디오 인식이 안 됐어도 제목·셋리스트 등 다른 근거로 곡이 확인됐는지
+function songConfirmed(m) {
+  if (m.song_confidence) return m.song_confidence === "high";
+  // 예전 결과: 근거 표에서 곡 제목 항목이 "높음"이면 확인된 것으로 봄
+  return (m.evidence || []).some((e) => /title|곡|song/i.test(e.field) && e.confidence === "high");
+}
+const OLD_NO_AUDIO_WARNING = "오디오로 노래를 특정하지 못했습니다";
+
+function renderBadge(rc, m) {
+  const badge = $("recog");
+  const songs = rc.songs || [];
+  if (rc.match) {
+    const extra = songs.length > 1 ? ` · ${songs.length}곡 인식 (메들리?)` : "";
+    badge.className = `badge ${rc.confidence || "low"}`;
+    badge.textContent = `오디오 인식 ${rc.votes}/${rc.total} 구간 일치${extra}`;
+    badge.title = songs.map((x) => `${x.artist} - ${x.title} (${x.votes}구간)`).join("\n");
+  } else if (songConfirmed(m)) {
+    badge.className = "badge info";
+    badge.textContent = "오디오 미인식 · 제목/웹으로 확인됨";
+    badge.title = (m.song_basis ? m.song_basis + "\n\n" : "") +
+      "라이브·직캠·커버 무대는 원곡 음원과 소리가 달라 Shazam이 못 찾는 경우가 많습니다.";
+  } else {
+    badge.className = "badge none";
+    badge.textContent = "오디오 미인식 · 추정";
+    badge.title = "오디오로도, 다른 근거로도 곡을 확실히 확인하지 못했습니다. 곡 정보를 꼭 확인하세요.";
+  }
+}
+
 function renderResult(res) {
   const m = res.meta;
   $("result").classList.remove("hidden");
 
-  const warns = (m.warnings || []).map((w) => el("div", { className: "warn", textContent: "⚠ " + w }));
+  const confirmed = !(res.recognition || {}).match && songConfirmed(m);
+  const warnList = (m.warnings || []).filter((w) => !(confirmed && w.startsWith(OLD_NO_AUDIO_WARNING)));
+  const warns = warnList.map((w) => el("div", { className: "warn", textContent: "⚠ " + w }));
   if (warns.length > 2) {
     const more = el("details", { className: "warn-more" }, el("summary", { textContent: `경고 ${warns.length - 2}개 더 보기` }), ...warns.slice(2));
     $("warnings").replaceChildren(...warns.slice(0, 2), more);
@@ -122,20 +152,18 @@ function renderResult(res) {
     $("warnings").replaceChildren(...warns);
   }
 
-  const rc = res.recognition || {};
-  const badge = $("recog");
-  badge.className = `badge ${rc.confidence || "none"}`;
-  badge.textContent = rc.match
-    ? `오디오 인식 ${rc.votes}/${rc.total} 일치 (${rc.provider})`
-    : "오디오 인식 실패";
+  renderBadge(res.recognition || {}, m);
 
   const s = m.song || {};
+  const heard = ((res.recognition || {}).songs || []).map((x) => `${x.artist} - ${x.title}`).join(", ");
   const rows = [
     ["곡", [s.title_ko, s.title_en].filter(Boolean).join(" / ")],
     ["아티스트", [s.artist_ko, s.artist_en].filter(Boolean).join(" / ")],
     ["멤버", (s.members || []).join(", ")],
     ["앨범", s.album], ["발매일", s.release_date], ["크레딧", s.credits],
   ];
+  if (m.song_basis) rows.push(["곡 확인 근거", m.song_basis]);
+  if (heard) rows.push(["오디오로 들린 곡", heard]);
   $("song").replaceChildren(...rows.flatMap(([k, v]) => [el("dt", { textContent: k }), el("dd", { textContent: v || "—" })]));
 
   renderTitles(m.title_candidates || [], m.selected_title);

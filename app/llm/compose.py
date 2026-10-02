@@ -19,7 +19,12 @@ SYSTEM = """너는 K-pop 유튜브 채널 운영 전문가다. 수집된 근거�
 - 태그: 한글과 영문/로마자를 쌍으로 (예: 뉴진스, NewJeans, 하니, HANNI, 슈퍼내추럴, Supernatural),
   그룹명+곡명 조합, 영상 유형(직캠, fancam), 팬덤 검색어. 합계 450자 이내로 중요도 순.
 - 해시태그: 5~10개, 공백 없이, 가장 중요한 3개를 앞에.
-- category: 대개 "Music" (예능/비하인드는 "Entertainment")."""
+- category: 대개 "Music" (예능/비하인드는 "Entertainment").
+- song_confidence: 곡 판정이 오디오 인식·원본 제목·셋리스트·화면 가사 등 독립된 근거로 확인되면 "high",
+  근거가 하나뿐이거나 약하면 "medium", 추측이면 "guess". song_basis에 무엇으로 확인했는지 한 줄로.
+  오디오 인식 결과의 songs에 여러 곡이 있으면 메들리일 수 있으니 확인해서 반영한다.
+- warnings에는 사용자가 실제로 확인하거나 조치해야 할 것만 넣는다. 오디오 인식 실패 자체는 쓰지 않는다
+  (화면에 따로 표시됨)."""
 
 _EVIDENCE = {
     "type": "object",
@@ -36,8 +41,8 @@ _EVIDENCE = {
 SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["song", "video_type", "title_candidates", "description", "tags",
-                 "hashtags", "category", "evidence", "warnings"],
+    "required": ["song", "song_confidence", "song_basis", "video_type", "title_candidates",
+                 "description", "tags", "hashtags", "category", "evidence", "warnings"],
     "properties": {
         "song": {
             "type": "object",
@@ -55,6 +60,10 @@ SCHEMA = {
                 "credits": {"type": "string"},
             },
         },
+        # 곡(제목+아티스트) 판정 전체의 신뢰도와 근거 요약. 오디오 인식이 실패해도
+        # 영상 제목·셋리스트 등으로 확실히 확인되면 high.
+        "song_confidence": {"type": "string", "enum": ["high", "medium", "guess"]},
+        "song_basis": {"type": "string"},
         "video_type": {"type": "string"},
         "title_candidates": {"type": "array", "items": {"type": "string"}},
         "description": {"type": "string"},
