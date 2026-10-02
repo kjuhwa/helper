@@ -101,6 +101,17 @@ def get_batch(bid: str) -> dict:
     return b.public()
 
 
+@app.post("/api/batches/{bid}/retry")
+def retry_batch(bid: str, include_canceled: bool = False) -> dict:
+    b = jobs.BATCHES.get(bid)
+    if not b:
+        raise HTTPException(404, "재생목록 작업을 찾을 수 없습니다")
+    reset = jobs.retry_batch(b, include_canceled)
+    for job in reset:
+        _spawn(job, force=False)
+    return {"retried": len(reset), "batch": b.public()}
+
+
 @app.post("/api/batches/{bid}/cancel")
 def cancel_batch(bid: str) -> dict:
     b = jobs.BATCHES.get(bid)

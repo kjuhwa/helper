@@ -32,3 +32,15 @@ def test_normalize_video_url():
     assert n("https://m.youtube.com/shorts/11cta61wi0g") == want
     assert n(" https://example.com/a.mp4 ") == "https://example.com/a.mp4"
     assert jobs.new_job("https://youtu.be/11cta61wi0g", "").cache_key == jobs.cache_key(want, "")
+
+
+def test_retry_batch_resets_errors():
+    pl = {"title": "PL", "count": 3, "entries": [{"url": f"https://y/r{i}", "title": f"r{i}"} for i in range(3)]}
+    b = jobs.new_batch("https://y/plr", "", pl)
+    a, c, d = (jobs.JOBS[j] for j in b.job_ids)
+    a.status, a.error = "error", "403"
+    c.status = "canceled"
+    d.status = "done"
+    assert [j.id for j in jobs.retry_batch(b)] == [a.id]
+    assert a.status == "queued" and a.error == "" and c.status == "canceled"
+    assert [j.id for j in jobs.retry_batch(b, include_canceled=True)] == [c.id]

@@ -146,6 +146,19 @@ def cancel_batch(batch: Batch) -> int:
     return n
 
 
+def retry_batch(batch: Batch, include_canceled: bool = False) -> list[Job]:
+    """오류(선택: 취소) 난 영상을 대기 상태로 되돌린다. 실행은 호출한 쪽에서."""
+    targets = {"error", "canceled"} if include_canceled else {"error"}
+    reset = []
+    for jid in batch.job_ids:
+        job = JOBS[jid]
+        if job.status in targets:
+            job.status, job.error, job.cancel = "queued", "", False
+            job.partial, job.started = {}, time.time()
+            reset.append(job)
+    return reset
+
+
 async def run(job: Job, force: bool = False) -> None:
     # 보관함에 있으면 대기 없이 바로 완료
     if not force:

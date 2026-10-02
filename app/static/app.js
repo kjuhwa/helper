@@ -439,6 +439,9 @@ function renderBatch(b) {
     b.finished ? "모두 끝났습니다" : running ? `진행 중: ${running.title || running.url}` : "",
   ].filter(Boolean).join(" · ");
   $("b-cancel").classList.toggle("hidden", b.finished || !b.items.some((i) => i.status === "queued"));
+  const failed = b.items.filter((i) => i.status === "error").length;
+  $("b-retry").classList.toggle("hidden", failed === 0);
+  $("b-retry").textContent = `실패한 영상 다시 시도 (${failed})`;
   if (b.done !== lastDone) { lastDone = b.done; refreshLibCount(); }
   $("b-items").replaceChildren(...b.items.map((it, n) => {
     const busy = !IDLE.includes(it.status);
@@ -456,6 +459,13 @@ function renderBatch(b) {
     return row;
   }));
 }
+
+$("b-retry").addEventListener("click", async () => {
+  if (!batchId) return;
+  const r = await (await fetch(`/api/batches/${batchId}/retry`, { method: "POST" })).json();
+  renderBatch(r.batch);
+  pollBatch();
+});
 
 $("b-cancel").addEventListener("click", async () => {
   if (!batchId || !confirm("아직 시작하지 않은 영상의 분석을 취소할까요? (진행 중인 영상은 끝까지 진행됩니다)")) return;

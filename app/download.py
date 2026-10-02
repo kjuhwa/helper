@@ -1,26 +1,48 @@
 """URL 영상 다운로드 (yt-dlp: 유튜브, 인스타그램, 틱톡, X, 직접 링크 등)."""
 from __future__ import annotations
 
+import logging
 import os
+import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .media import ffmpeg_exe
 
 
+log = logging.getLogger(__name__)
+
+
 class DownloadError(RuntimeError):
     pass
+
+
+# 유튜브가 연속 다운로드 중 가끔 403(Forbidden)/429로 막을 때: 간격을 두고 재시도 (대기초, 추가 옵션)
+# 2026-10 기준 yt-dlp 기본 클라이언트(visionos) 외의 player_client는 모두 실패해서
+# 클라이언트를 바꾸지 않고 기다렸다가 같은 방식으로 다시 받는다.
+_ATTEMPTS: list[tuple[int, dict]] = [
+    (0, {}),
+    (8, {}),
+    (20, {"format": "bv*+ba/b"}),   # 마지막엔 화질 제한 없이
+]
+_RETRYABLE = ("403", "429", "Forbidden", "Too Many Requests", "unable to download video data",
+              "HTTP Error 5", "timed out", "Connection reset")
+
+
+def is_retryable(msg: str) -> bool:
+    return any(k in msg for k in _RETRYABLE)
 
 
 def download(url: str, out_dir: Path, max_height: int = 720) -> tuple[Path, dict]:
     """영상을 받아 (파일 경로, 페이지 메타데이터)를 돌려준다.
 
     분석에는 고화질이 필요 없으므로 720p 이하로 받는다.
+    403 같은 일시적인 거부는 접속 방식을 바꿔 최대 3번까지 시도한다.
     """
     import yt_dlp
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    opts = {
+    base = {
         "outtmpl": str(out_dir / "input.%(ext)s"),
         "format": f"bv*[height<={max_height}]+ba/b[height<={max_height}]/bv*+ba/b",
         "merge_output_format": "mp4",
@@ -29,19 +51,37 @@ def download(url: str, out_dir: Path, max_height: int = 720) -> tuple[Path, dict
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
+        "retries": 3,
+        "fragment_retries": 3,
     }
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            path = Path(ydl.prepare_filename(info))
-    except Exception as e:
-        raise DownloadError(f"영상을 받지 못했습니다: {e}") from e
-    if not path.exists():  # 병합 후 확장자가 바뀐 경우
-        found = sorted(out_dir.glob("input.*"))
-        if not found:
-            raise DownloadError("다운로드한 파일을 찾을 수 없습니다.")
-        path = found[0]
-    return path, page_meta(info)
+    last, tries = "", 0
+    for i, (wait, extra) in enumerate(_ATTEMPTS):
+        if i and not is_retryable(last):
+            break  # 비공개·삭제·지역 제한 등은 재시도해도 소용없음
+        if wait:
+            log.info("다운로드 재시도 %d/%d (%ds 후): %s", i + 1, len(_ATTEMPTS), wait, url)
+            time.sleep(wait)
+        tries += 1
+        for f in out_dir.glob("input.*"):  # 이전 시도의 조각 파일 정리
+            f.unlink(missing_ok=True)
+        try:
+            with yt_dlp.YoutubeDL({**base, **extra}) as ydl:
+                if i:
+                    ydl.cache.remove()  # 오래된 서명 캐시가 403 원인일 때가 있음
+                info = ydl.extract_info(url, download=True)
+                path = Path(ydl.prepare_filename(info))
+        except Exception as e:
+            last = str(e)
+            continue
+        if not path.exists():  # 병합 후 확장자가 바뀐 경우
+            found = sorted(out_dir.glob("input.*"))
+            if not found:
+                last = "다운로드한 파일을 찾을 수 없습니다."
+                continue
+            path = found[0]
+        return path, page_meta(info)
+    tried = f" ({tries}번 시도)" if tries > 1 else ""
+    raise DownloadError(f"영상을 받지 못했습니다{tried}: {last}")
 
 
 PLAYLIST_MAX = int(os.getenv("HELPER_PLAYLIST_MAX", "100"))
