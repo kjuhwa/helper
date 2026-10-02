@@ -1,0 +1,10 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+pydantic>=2.6
+python-dotenv>=1.0
+shazamio>=0.8.1
+imageio-ffmpeg>=0.6
+pytest>=8
+audioop-lts; python_version >= "3.13"
+yt-dlp>=2025.1
